@@ -49,4 +49,4 @@ dst:
 
 ## Usage
 
-`bundle exec fogup`
+`bundle exec bin/fogup`
