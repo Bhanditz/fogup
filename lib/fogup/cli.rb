@@ -52,6 +52,8 @@ module Fogup
         body: src_file.body,
         public: true
       )
+    rescue Errno::EISDIR
+      puts '  but was a directory, skipping'.red
     end
 
     def dst_key(src_file)
