@@ -57,9 +57,8 @@ module Fogup
     end
 
     def dst_key(src_file)
-      src_file.key.tap do |dst_key|
-        dst_key = "#{dst_config[:prefix]}#{dst_key}" if dst_config[:prefix]
-      end
+      prefix = dst_config[:prefix] || ''
+      "#{prefix}#{src_file.key}"
     end
 
     def entity_is_directory?(src_file)
@@ -67,7 +66,7 @@ module Fogup
     end
 
     def entity_exists_in_dst?(src_file)
-      !dst_dir.files.head(src_file.key).nil?
+      !dst_dir.files.head(dst_key(src_file)).nil?
     end
 
     def src_conn
