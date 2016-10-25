@@ -23,17 +23,21 @@ module Fogup
         i = i + 1
         if backup?(i)
           # puts i.inspect.green
-          backup_entity(src_file)
+          begin
+            backup_entity(src_file)
+          rescue Excon::Errors::Error => e
+            puts "  #{e.class}; reconnecting".red.bold
+            sleep 5
+            connect(:src)
+            connect(:dst)
+            retry
+          end
         else
           # puts i.inspect.red
         end
         break unless keep_backing_up?(i)
       end
       puts 'Done!'.bold
-    rescue Excon::Errors::SocketError
-      puts '  Excon::Errors::SocketError; reconnecting'.red.bold
-      connect(:src)
-      connect(:dst)
     end
 
     protected
