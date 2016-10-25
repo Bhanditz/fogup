@@ -11,15 +11,50 @@ module Fogup
     default_task :backup
 
     desc 'backup', 'Backup one Fog storage location to another'
+    method_option :first, aliases: '-f', type: :numeric,
+      desc: 'Index of first object to copy, starts at 1'
+    method_option :last, aliases: '-l', type: :numeric,
+      desc: 'Index of last object to copy, starts at 1'
+
     def backup
       puts "Backing up #{src_desc} to #{dst_desc}...".bold
+      i = 0
       src_dir.files.each do |src_file|
-        backup_entity(src_file)
+        i = i + 1
+        if backup?(i)
+          # puts i.inspect.green
+          backup_entity(src_file)
+        else
+          # puts i.inspect.red
+        end
+        break unless keep_backing_up?(i)
       end
       puts 'Done!'.bold
+    rescue Excon::Errors::SocketError
+      puts '  Excon::Errors::SocketError; reconnecting'.red.bold
+      connect(:src)
+      connect(:dst)
     end
 
     protected
+
+    def backup?(index)
+      if options[:first] && (index < options[:first])
+        false
+      elsif options[:last] && (index > options[:last])
+        false
+      else
+        true
+      end
+    end
+
+    def keep_backing_up?(index)
+      if options[:last] && (index >= options[:last])
+        false
+      else
+        true
+      end
+    end
 
     def src_desc
       description(:src)
@@ -79,10 +114,13 @@ module Fogup
 
     def connection(target)
       @connections ||= {}
-      @connections[target] ||= begin
-        credentials = config(target)[:credentials]
-        Fog::Storage.new(credentials)
-      end
+      connect(target) unless @connections.key?(target)
+      @connections[target]
+    end
+
+    def connect(target)
+      credentials = config(target)[:credentials]
+      @connections[target] = Fog::Storage.new(credentials)
     end
 
     def src_config
