@@ -174,7 +174,7 @@ module Fogup
     end
 
     def each_src_dir_file_from_marker(marker)
-      current_marker = marker.dup
+      current_marker = marker.nil? ? nil : marker.dup
       retry_on_http_errors do
         files = src_dir_files_from_marker(current_marker)
         files.each do |f|
