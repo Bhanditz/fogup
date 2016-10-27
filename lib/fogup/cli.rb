@@ -20,16 +20,9 @@ module Fogup
 
     def backup
       puts "Backing up #{src_desc} to #{dst_desc}...".bold
-      i = 0
       each_file_to_backup do |src_file|
-        begin
+        retry_on_http_errors do
           backup_entity(src_file)
-        rescue Excon::Errors::Error => e
-          puts "  #{e.class}; reconnecting".red.bold
-          sleep 5
-          connect(:src)
-          connect(:dst)
-          retry
         end
       end
       puts 'Done!'.bold
@@ -43,7 +36,7 @@ module Fogup
       File.open(list_log_filename, 'a') do |list_log|
         puts "Listing files in #{src_desc} to #{list_log_filename}...".bold
         i = 0
-        src_dir_files_from_marker(list_log_resume_marker).each do |src_file|
+        each_src_dir_file_from_marker(list_log_resume_marker) do |src_file|
           i = i + 1
           puts "* [#{i}] #{src_file.key}"
           list_log << src_file.key + "\n"
@@ -105,6 +98,18 @@ module Fogup
 
     protected
 
+    def retry_on_http_errors
+      begin
+        yield
+      rescue Excon::Errors::Error => e
+        puts "  #{e.class}; reconnecting".red.bold
+        sleep 5
+        connect(:src)
+        connect(:dst)
+        retry
+      end
+    end
+
     def each_file_to_backup
       if options[:list]
         File.open(options[:list], 'r').each_line do |line|
@@ -114,7 +119,7 @@ module Fogup
           yield file
         end
       else
-        src_dir_files_from_marker(options[:prev]).each do |f|
+        each_src_dir_file_from_marker(options[:prev]) do |f|
           yield f
           break if f.key == options[:last]
         end
@@ -129,6 +134,15 @@ module Fogup
 
     def list_log_filename
       'log/src_list.log'
+    end
+
+    def each_src_dir_file_from_marker(marker)
+      files = src_dir_files_from_marker(marker)
+      files.each do |f|
+        retry_on_http_errors do
+          yield f
+        end
+      end
     end
 
     def src_dir_files_from_marker(marker)
