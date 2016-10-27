@@ -10,4 +10,4 @@
 /fog.yml
 /.ruby-version
 /log
-/bin/parallel*.sh
+parallel*.sh

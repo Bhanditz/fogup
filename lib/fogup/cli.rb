@@ -68,7 +68,7 @@ module Fogup
 
     desc 'parallel', 'Generates a script for parallel backups'
     method_option :instances, aliases: '-i', type: :numeric, required: true,
-      desc: 'Number of instances to run'
+      desc: 'Total number of instances to run'
     method_option :groups, aliases: '-g', type: :numeric,
       desc: 'Number of groups to split the instances between'
 
