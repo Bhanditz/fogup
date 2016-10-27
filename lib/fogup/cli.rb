@@ -1,7 +1,7 @@
 require 'active_support/core_ext/hash'
 require 'colorize'
 require 'fog'
-#require 'fog/openstack'
+require 'fog/storage/openstack/models/files'
 require 'mime-types'
 require 'thor'
 require 'yaml'
@@ -11,53 +11,132 @@ module Fogup
     default_task :backup
 
     desc 'backup', 'Backup one Fog storage location to another'
-    method_option :first, aliases: '-f', type: :numeric,
-      desc: 'Index of first object to copy, starts at 1'
-    method_option :last, aliases: '-l', type: :numeric,
-      desc: 'Index of last object to copy, starts at 1'
+    method_option :prev, aliases: '-p', type: :string,
+      desc: 'key of previous object to copy from'
+    method_option :last, aliases: '-l', type: :string,
+      desc: 'Key of last object to copy'
+    method_option :list, aliases: '-r', type: :string,
+      desc: 'Read object names to back up from list file'
 
     def backup
       puts "Backing up #{src_desc} to #{dst_desc}...".bold
       i = 0
-      src_dir.files.each do |src_file|
-        i = i + 1
-        if backup?(i)
-          # puts i.inspect.green
-          begin
-            backup_entity(src_file)
-          rescue Excon::Errors::Error => e
-            puts "  #{e.class}; reconnecting".red.bold
-            sleep 5
-            connect(:src)
-            connect(:dst)
-            retry
-          end
-        else
-          # puts i.inspect.red
+      each_file_to_backup do |src_file|
+        begin
+          backup_entity(src_file)
+        rescue Excon::Errors::Error => e
+          puts "  #{e.class}; reconnecting".red.bold
+          sleep 5
+          connect(:src)
+          connect(:dst)
+          retry
         end
-        break unless keep_backing_up?(i)
       end
       puts 'Done!'.bold
     end
 
-    protected
+    desc 'list', 'Output a list of all files in the src container'
+    method_option :resume, aliases: '-r', type: :boolean,
+      desc: 'Resume from last logged Swift marker'
 
-    def backup?(index)
-      if options[:first] && (index < options[:first])
-        false
-      elsif options[:last] && (index > options[:last])
-        false
-      else
-        true
+    def list
+      File.open(list_log_filename, 'a') do |list_log|
+        puts "Listing files in #{src_desc} to #{list_log_filename}...".bold
+        i = 0
+        src_dir_files_from_marker(list_log_resume_marker).each do |src_file|
+          i = i + 1
+          puts "* [#{i}] #{src_file.key}"
+          list_log << src_file.key + "\n"
+        end
+        puts 'Done!'.bold
       end
     end
 
-    def keep_backing_up?(index)
-      if options[:last] && (index >= options[:last])
-        false
-      else
-        true
+    desc 'count', 'Count objects in container'
+    method_option :dst, aliases: '-d', type: :boolean
+
+    def count
+      if options[:dst]
+        i = 0
+        dst_dir.files.each do |f|
+          i = i + 1
+          puts i.to_s
+        end
       end
+    end
+
+    desc 'parallel', 'Generates a script for parallel backups'
+    method_option :number, aliases: '-n', type: :numeric, required: true,
+      desc: 'Number of instances to run'
+
+    def parallel
+      unless File.exists?(list_log_filename)
+        puts "No log file #{list_log_filename} to examine. Run `fogup list` first."
+        exit 1
+      end
+
+      total = `wc -l #{list_log_filename}`.to_i
+      each = total / options[:number].to_i
+
+      puts "#!/bin/bash"
+
+      (1..options[:number].to_i).each do |instance|
+        previous = if instance == 1
+                     nil
+                   else
+                     line = (instance - 1) * each
+                     `sed '#{line}q;d' #{list_log_filename}`.chomp
+                   end
+        last = if instance == options[:number].to_i
+                 nil
+               else
+                 line = instance * each
+                 `sed '#{line}q;d' #{list_log_filename}`.chomp
+               end
+        log = format("%0#{options[:number].to_s.length}d", instance)
+
+        command = "bundle exec bin/fogup backup"
+        command << " -p #{previous}" unless previous.nil?
+        command << " -l #{last}" unless last.nil?
+        command << " > log/fogup.#{log}.log 2>&1 &"
+        puts command
+      end
+    end
+
+    protected
+
+    def each_file_to_backup
+      if options[:list]
+        File.open(options[:list], 'r').each_line do |line|
+          key = line.chomp
+          file = src_dir.files.head(key)
+          next if file.nil?
+          yield file
+        end
+      else
+        src_dir_files_from_marker(options[:prev]).each do |f|
+          yield f
+          break if f.key == options[:last]
+        end
+      end
+    end
+
+    def list_log_resume_marker
+      marker = `tail -n 1 #{list_log_filename}`
+      puts "Resuming from marker #{marker}"
+      marker.chomp
+    end
+
+    def list_log_filename
+      'log/src_list.log'
+    end
+
+    def src_dir_files_from_marker(marker)
+      Fog::Storage::OpenStack::Files.new(
+        directory: src_dir,
+        service: src_dir.service,
+        marker: marker
+      )
     end
 
     def src_desc

@@ -29,6 +29,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency 'activesupport'
   spec.add_dependency 'colorize'
   spec.add_dependency 'fog'
+  spec.add_dependency 'fog-openstack', '~> 0.1.15'
   spec.add_dependency 'mime-types'
   spec.add_dependency 'thor'
 
