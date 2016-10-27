@@ -145,10 +145,12 @@ module Fogup
     end
 
     def each_src_dir_file_from_marker(marker)
-      files = src_dir_files_from_marker(marker)
-      files.each do |f|
-        retry_on_http_errors do
+      current_marker = marker.dup
+      retry_on_http_errors do
+        files = src_dir_files_from_marker(current_marker)
+        files.each do |f|
           yield f
+          current_marker = f.key
         end
       end
     end
