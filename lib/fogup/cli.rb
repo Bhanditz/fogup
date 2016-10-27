@@ -109,9 +109,11 @@ module Fogup
         command
       end
 
+      FileUtils.mkdir('tmp')
+
       instances_per_group = instances / groups
       (1..groups).each do |s|
-        script_name = "bin/parallel.#{s}.sh"
+        script_name = "tmp/parallel.#{s}.sh"
         puts "* Writing #{script_name}"
 
         first = (s - 1) * instances_per_group
