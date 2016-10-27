@@ -67,8 +67,10 @@ module Fogup
     end
 
     desc 'parallel', 'Generates a script for parallel backups'
-    method_option :number, aliases: '-n', type: :numeric, required: true,
+    method_option :instances, aliases: '-i', type: :numeric, required: true,
       desc: 'Number of instances to run'
+    method_option :groups, aliases: '-g', type: :numeric,
+      desc: 'Number of groups to split the instances between'
 
     def parallel
       unless File.exists?(list_log_filename)
@@ -76,32 +78,57 @@ module Fogup
         exit 1
       end
 
+      puts 'Generating script(s) for parallel backups...'.bold
+
+      groups = options[:groups] || 1
+      instances = options[:instances].to_i
+
       total = `wc -l #{list_log_filename}`.to_i
-      each = total / options[:number].to_i
+      each = total / instances
 
-      puts "#!/bin/bash"
-
-      (1..options[:number].to_i).each do |instance|
+      puts "* Extracting markers from #{list_log_filename}"
+      commands = (1..instances).map do |instance|
         previous = if instance == 1
                      nil
                    else
                      line = (instance - 1) * each
                      `sed '#{line}q;d' #{list_log_filename}`.chomp
                    end
-        last = if instance == options[:number].to_i
+        last = if instance == instances
                  nil
                else
                  line = instance * each
                  `sed '#{line}q;d' #{list_log_filename}`.chomp
                end
-        log = format("%0#{options[:number].to_s.length}d", instance)
+        log = format("%0#{instances.to_s.length}d", instance)
 
         command = "bundle exec bin/fogup backup"
         command << " -p #{previous}" unless previous.nil?
         command << " -l #{last}" unless last.nil?
         command << " > log/fogup.#{log}.log 2>&1 &"
-        puts command
+        command
       end
+
+      instances_per_group = instances / groups
+      (1..groups).each do |s|
+        script_name = "bin/parallel.#{s}.sh"
+        puts "* Writing #{script_name}"
+
+        first = (s - 1) * instances_per_group
+        last = if s == groups
+                 -1
+               else
+                 (s * instances_per_group) - 1 # ensure last server picks up any remainders from integer division
+               end
+        File.open(script_name, 'w', 0755) do |script|
+          script << "#!/bin/bash\n"
+          commands[first..last].each do |command|
+            script << command << "\n"
+          end
+        end
+      end
+
+      puts 'Done!'.bold
     end
 
     protected
