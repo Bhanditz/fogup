@@ -109,7 +109,7 @@ module Fogup
         command
       end
 
-      FileUtils.mkdir('tmp')
+      FileUtils.mkdir_p('tmp')
 
       instances_per_group = instances / groups
       (1..groups).each do |s|
