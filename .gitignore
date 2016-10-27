@@ -9,5 +9,5 @@
 /tmp/
 /fog.yml
 /.ruby-version
-/log
+/log/*
 parallel*.sh
