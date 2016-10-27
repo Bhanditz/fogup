@@ -47,14 +47,22 @@ module Fogup
 
     desc 'count', 'Count objects in container'
     method_option :dst, aliases: '-d', type: :boolean
+    method_option :src, aliases: '-s', type: :boolean
 
     def count
-      if options[:dst]
-        i = 0
-        dst_dir.files.each do |f|
-          i = i + 1
-          puts i.to_s
-        end
+      fail 'Specify either dst or src' unless options[:dst] ^ options[:src]
+      target_dir = options[:dst] ? dst_dir : src_dir
+
+      if options[:src]
+        puts "Counting objects in src dir #{src_desc}...".bold
+      else
+        puts "Counting objects in dst dir #{dst_desc}...".bold
+      end
+
+      i = 0
+      target_dir.files.each do |f|
+        i = i + 1
+        puts i.to_s
       end
     end
 
